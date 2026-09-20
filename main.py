@@ -57,18 +57,27 @@ async def cmd_start(message: types.Message):
 async def handle_message(message: types.Message):
     if not message.text:
         return
-    try:
-        response = ai_client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=[SYSTEM_PROMPT, f"\n\nВопрос к богам и рунам:\n{message.text}"]
-        )
-        if response.text:
-            await message.answer(response.text)
-        else:
-            await message.answer("Боги\nхранят молчание. Спроси иначе.")
-    except Exception as e:
-        logging.error("Gemini API error", exc_info=True)
-        await message.answer(f"Ошибка API: {e}")
+        
+    response = None
+    for attempt in range(3):
+        try:
+            response = ai_client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=[SYSTEM_PROMPT, f"\n\nВопрос к богам и рунам:\n{message.text}"]
+            )
+            break
+        except Exception as e:
+            if "503" in str(e) and attempt < 2:
+                await asyncio.sleep(2)
+                continue
+            logging.error("Gemini API error", exc_info=True)
+            await message.answer("Чертоги Одина перегружены эфиром бытия. Задай свой вопрос через пару мгновений :)")
+            return
+
+    if response and response.text:
+        await message.answer(response.text)
+    else:
+        await message.answer("Боги\nхранят молчание. Спроси иначе.")
 
 async def handle_ping(request):
     return web.Response(text="Bot is running")
