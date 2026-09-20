@@ -1,3 +1,2 @@
-text
-airogram>=3.0.0
+aiogram>=3.0.0
 google-genai
