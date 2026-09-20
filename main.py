@@ -54,7 +54,7 @@ async def handle_message(message: types.Message):
             await message.answer("Боги хранят молчание. Спроси иначе.")
     except Exception as e:
         logging.error(f"Gemini API error: {e}")
-        await message.answer("Связь с чертогами прервана. Сконцентрируй волю и обратись вновь.")
+        await message.answer(f"Ошибка API: {e}"
 
 async def handle_ping(request):
     return web.Response(text='Bot is running!')
