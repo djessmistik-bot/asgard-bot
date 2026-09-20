@@ -36,7 +36,7 @@ async def handle_message(message: types.Message):
     try:
         # Исправлен асинхронный вызов для google-genai SDK через ai_client.aio
         response = await ai_client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=f"{SYSTEM_PROMPT}\n\nВопрос спрашивающего:\n{message.text}"
         )
         if response.text:
