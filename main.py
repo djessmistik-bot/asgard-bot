@@ -49,8 +49,6 @@ SYSTEM_PROMPT = """
 ответ и воля бога]
 """
 
-MODELS = ["gemini-2.0-flash", "gemini-2.5-flash"]
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer("Врата Асгарда\nраспахнуты. Изложи свой запрос\nбогам...")
@@ -61,28 +59,24 @@ async def handle_message(message: types.Message):
         return
 
     prompt_text = f"{SYSTEM_PROMPT}\n\nВопрос к богам и рунам:\n{message.text}"
-    response_text = None
 
-    for model_name in MODELS:
-        for attempt in range(2):
-            try:
-                response = ai_client.models.generate_content(
-                    model=model_name,
-                    contents=[prompt_text]
-                )
-                if response and response.text:
-                    response_text = response.text
-                    break
-            except Exception as e:
-                logging.error(f"Error with model {model_name} (attempt {attempt + 1}): {e}")
-                await asyncio.sleep(1.5)
-        if response_text:
-            break
-
-    if response_text:
-        await message.answer(response_text)
-    else:
-        await message.answer("Связь с чертогами прервана. Осознай свою волю и обратись вновь через минуту.")
+    # Делаем 3 попытки на случай временной загруженности серверов Google
+    for attempt in range(3):
+        try:
+            response = ai_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[prompt_text]
+            )
+            if response and response.text:
+                await message.answer(response.text)
+                return
+        except Exception as e:
+            logging.error(f"Gemini API error (attempt {attempt + 1}): {e}")
+            if "503" in str(e) and attempt < 2:
+                await asyncio.sleep(2)
+                continue
+            else:
+                await message.answer(f"Связь прервана: {e}")
 
 async def handle_ping(request):
     return web.Response(text="Bot is running")
