@@ -1,9 +1,13 @@
 import asyncio
+import logging
 import os
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from google import genai
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
 
 # Инициализация токенов из переменных окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -30,19 +34,24 @@ async def handle_message(message: types.Message):
     if not message.text:
         return
     try:
-        response = ai_client.models.generate_content(
+        # Исправлен асинхронный вызов для google-genai SDK через ai_client.aio
+        response = await ai_client.aio.models.generate_content(
             model="gemini-2.5-flash",
             contents=f"{SYSTEM_PROMPT}\n\nВопрос спрашивающего:\n{message.text}"
         )
-        await message.answer(response.text)
+        if response.text:
+            await message.answer(response.text)
+        else:
+            await message.answer("Оракул погрузился в безмолвие.")
     except Exception as e:
-        await message.answer("Шепот богов затих в тумане. Попробуй обратиться позже.")
+        logging.error(f"Gemini API error: {e}")
+        await message.answer(f"Ошибка оракула: {e}")
 
-# Хэндлер для проверки работоспособности веб-сервера (ping)
+# Хэндлер для проверки работоспособности веб-сервера
 async def handle_ping(request):
     return web.Response(text='Bot is running!')
 
-# Настройка и запуск веб-сервера для удержания хостинга
+# Настройка веб-сервера (порт изменен на 10000, как на скриншоте)
 async def start_web_server():
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -51,14 +60,12 @@ async def start_web_server():
     runner = web.AppRunner(app)
     await runner.setup()
     
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
 async def main():
-    # Запускаем веб-сервер в фоновом режиме
     await start_web_server()
-    # Запускаем опрос Telegram-бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
