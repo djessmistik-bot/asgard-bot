@@ -59,7 +59,7 @@ async def handle_message(message: types.Message):
         return
     try:
         response = await ai_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=[SYSTEM_PROMPT, f"\n\nВопрос к богам и рунам:\n{message.text}"]
         )
         if response.text:
