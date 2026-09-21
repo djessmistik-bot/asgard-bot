@@ -9,77 +9,83 @@ from google import genai
 logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Получаем ключи через запятую и превращаем в список
+RAW_KEYS = os.getenv("GEMINI_API_KEY", "")
+API_KEYS = [k.strip() for k in RAW_KEYS.split(",") if k.strip()]
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-ai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+current_key_idx = 0
+
+def get_current_client():
+    global current_key_idx
+    if not API_KEYS:
+        raise ValueError("GEMINI_API_KEY не задан в Environment!")
+    key = API_KEYS[current_key_idx % len(API_KEYS)]
+    return genai.Client(api_key=key)
 
 SYSTEM_PROMPT = """
-Ты — Оракул Асгарда, пернатый
-Старшего Футарка и боевой Советник
-Одина.
-Руны суровы, точны и
-бескомпромиссны.
+Ты — Оракул Асгарда, глашатай Старшего Футарка и богов Северного Пантеона.
+Руны суровы, точны и бескомпромиссны.
 
 ПРАВИЛА ОТВЕТА:
-1. Сначала объяви, какое именно
-божество отвечает на вопрос
-(например: Всеотец Один, Тор
-Громовержец, Фрейя Владычица
-Сейда, Тюр Хранитель Клятв, Хеймдалль Страж Моста, Фрейр Податель Благ), божество должно
-соответствовать смыслу вопроса.
-2. Вытяни и назови конкретную руну
-Старшего Футарка (с символом и
-сутью).
-3. Дай строгое сакральное толкование
-руны к ситуации (1 предложение).
-4. Огласи прямой, мощный и
-лаконичный Вердикт — четкий ответ
-на вопрос (максимум 2-3
-бескомпромиссных предложения).
+1. Сначала объяви, какое именно божество отвечает на вопрос (например: Всеотец Один, Тор Громовержец, Фрейя Владычица Сейта, Тюр Хранитель Клятв, Хеймдалль Страж Моста, Фрейр Податель Благ). Божество должно соответствовать смыслу вопроса.
+2. Вытяни и назови конкретную руну Старшего Футарка (с символом и сутью).
+3. Дай строгое сакральное толкование руны к ситуации (1 предложение).
+4. Огласи прямой, мощный и лаконичный Вердикт — четкий ответ на вопрос (максимум 2-3 бескомпромиссных предложения).
 
 СТРОГИЙ ШАБЛОН ОТВЕТА:
-Голос: [Имя божества и его титул]
-Руна: [Символ, Название — сакральная
-суть]
-Толкование: [В чем суть знака для
-вопроса]
-Вердикт: [Прямой, бескомпромиссный
-ответ и воля бога]
+Глас: [Имя божества и его титул]
+Руна: [Символ, Название — сакральная суть]
+Толкование: [В чем суть знака для вопроса]
+Вердикт: [Прямой, бескомпромиссный ответ и воля бога]
 """
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Врата Асгарда\nраспахнуты. Изложи свой запрос\nбогам...")
+    await message.answer("Врата Асгарда распахнуты. Назови свой вопрос богам...")
 
 @dp.message()
 async def handle_message(message: types.Message):
+    global current_key_idx
     if not message.text:
         return
 
-    prompt_text = f"{SYSTEM_PROMPT}\n\nВопрос к богам и рунам:\n{message.text}"
-
-    # Делаем 3 попытки на случай временной загруженности серверов Google
-    for attempt in range(3):
+    prompt_text = f"{SYSTEM_PROMPT}\n\nВопрос к богам и рунам: {message.text}"
+    total_keys = len(API_KEYS)
+    
+    # Пробуем по очереди каждый ключ из списка
+    for attempt in range(max(1, total_keys)):
         try:
-            response = ai_client.models.generate_content(
+            client = get_current_client()
+            response = await client.aio.models.generate_content(
                 model="gemini-3.6-flash",
-                contents=[prompt_text]
+                contents=prompt_text
             )
             if response and response.text:
                 await message.answer(response.text)
                 return
         except Exception as e:
-            logging.error(f"Gemini API error (attempt {attempt + 1}): {e}")
-            if "503" in str(e) and attempt < 2:
+            error_str = str(e)
+            logging.error(f"Сбой ключа #{current_key_idx + 1}: {error_str}")
+            
+            # Если исчерпан суточный лимит 429 — переключаем индекс на следующий ключ
+            if "429" in error_str:
+                current_key_idx = (current_key_idx + 1) % total_keys
+                logging.info(f"Переключение на резервный ключ #{current_key_idx + 1}")
+                continue
+            elif "503" in error_str:
                 await asyncio.sleep(2)
                 continue
             else:
                 await message.answer(f"Связь прервана: {e}")
+                return
+
+    await message.answer("Все чертоги сейчас закрыты (исчерпаны лимиты на всех ключах). Обратись на рассвете.")
 
 async def handle_ping(request):
-    return web.Response(text="Bot is running")
+    return web.Response(text="Bot is running!")
 
 async def start_web_server():
     app = web.Application()
