@@ -109,7 +109,7 @@ async def handle_message(message: types.Message):
         try:
             client = get_current_client()
             response = await client.aio.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.6-flash",
                 contents=message.text,
                 config=genai_types.GenerateContentConfig(
                     system_instruction=system_instruction,
